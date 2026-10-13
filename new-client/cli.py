@@ -76,22 +76,27 @@ def cmd_multi_demo(strings_a, mod_a, strings_b, mod_b, game_id, datawin_path, ev
 
 
 from soulmod_client.manager import Manager
-from soulmod_client.dtkr import load_lang, lang_ops, font_ops, sprite_ops, code_reports
+from soulmod_client.dtkr import load_lang, lang_ops, font_ops, sprite_ops, code_reports, audio_reports
 
 
 def cmd_dtkr_build(lang_path, result_path, stage_dir, mod_id, game_id, out_dir):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     game = resolve(game_id)
-    mapping = load_lang(lang_path)
-    strings = lang_ops(mod_id, mapping)
+    if lang_path == "NONE":
+        strings, skipped = [], []
+    else:
+        strings, skipped = lang_ops(mod_id, load_lang(lang_path))
     result = json.loads(Path(result_path).read_text(encoding="utf-8"))
     fonts = font_ops(mod_id, result["resources"])
     sprites = sprite_ops(mod_id, result["sprites"])
     patched = {c["name"]: c for c in result["patchedCodes"]}
-    base_names = {c["name"] for c in result["baseCodes"]}
-    added = [patched[n] for n in sorted(set(patched) - base_names)]
+    base = {c["name"]: c for c in result["baseCodes"]}
+    added = [patched[n] for n in sorted(set(patched) - set(base))]
+    changed = sorted(n for n in set(patched) & set(base)
+                     if patched[n].get("bytecodeSha256") != base[n].get("bytecodeSha256"))
     codes = code_reports(added)
+    audios = audio_reports(result.get("audio", []))
     stage = Path(stage_dir)
     assets = []
     for op in fonts + sprites:
@@ -99,15 +104,26 @@ def cmd_dtkr_build(lang_path, result_path, stage_dir, mod_id, game_id, out_dir):
         digest = hashlib.sha256(src.read_bytes()).hexdigest()
         assert digest == op["assetSha256"], op["id"]
         assets.append(op["assetPath"])
+    for a in result.get("audio", []):
+        asset = a.get("asset") or {}
+        if asset.get("relativePath"):
+            src = stage / asset["relativePath"]
+            digest = hashlib.sha256(src.read_bytes()).hexdigest()
+            assert digest == asset["sha256"], a["name"]
+            assets.append(asset["relativePath"])
     ops = strings + fonts + sprites
     (out / "manifest.json").write_text(json.dumps({
         "manifestVersion": 1, "id": mod_id, "game": game,
-        "counts": {"strings": len(strings), "fonts": len(fonts),
-                     "sprites": len(sprites), "codeReview": len(codes)},
+        "counts": {"strings": len(strings), "skippedLang": len(skipped),
+                     "fonts": len(fonts), "sprites": len(sprites),
+                     "codeReview": len(codes), "codeChanged": len(changed),
+                     "audioReview": len(audios)},
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "operations.json").write_text(json.dumps(ops, ensure_ascii=False), encoding="utf-8")
-    (out / "review.json").write_text(json.dumps(codes, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"DTKR-BUILD OK strings={len(strings)} fonts={len(fonts)} sprites={len(sprites)} review={len(codes)} assets={len(assets)}")
+    (out / "review.json").write_text(json.dumps(
+        {"codes": codes, "changedCodes": changed, "audio": audios, "skippedLang": skipped},
+        ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"DTKR-BUILD OK strings={len(strings)} skipped={len(skipped)} fonts={len(fonts)} sprites={len(sprites)} codeReview={len(codes)} changed={len(changed)} audioReview={len(audios)} assets={len(assets)}")
 
 
 if __name__ == "__main__":

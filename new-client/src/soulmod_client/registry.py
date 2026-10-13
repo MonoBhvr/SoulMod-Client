@@ -15,6 +15,7 @@ GAMES = {
     "deltarune.chapter2": {"targetFile": "data.win", "mode": "chapter2"},
     "deltarune.chapter3": {"targetFile": "data.win", "mode": "chapter3"},
     "deltarune.chapter4": {"targetFile": "data.win", "mode": "chapter4"},
+    "deltarune.chapter5": {"targetFile": "data.win", "mode": "chapter5"},
     "deltarune.launcher": {"targetFile": "data.win", "mode": "launcher"},
 }
 

@@ -14,18 +14,23 @@ def load_lang(path) -> dict:
     return data
 
 
-def lang_ops(mod_id: str, mapping: dict) -> list:
+def lang_ops(mod_id: str, mapping: dict) -> tuple:
     if not isinstance(mod_id, str) or not MOD_ID_RE.match(mod_id):
         raise NormalizerError(f"bad mod id: {mod_id!r}")
     ops = []
+    skipped = []
     for key in sorted(mapping.keys()):
         if key in SKIP_KEYS:
+            skipped.append(key)
             continue
         value = mapping[key]
         if not isinstance(key, str) or not key:
             raise NormalizerError("bad lang key")
-        if not isinstance(value, str) or not value:
+        if not isinstance(value, str):
             raise NormalizerError(f"bad lang value for {key!r}")
+        if not value.strip():
+            skipped.append(key)
+            continue
         ops.append({
             "id": f"{mod_id}.lang.{key}",
             "operationVersion": 1,
@@ -36,9 +41,7 @@ def lang_ops(mod_id: str, mapping: dict) -> list:
             "reads": [f"string:{key}"],
             "writes": [f"string:{key}"],
         })
-    if not ops:
-        raise NormalizerError("no translatable entries")
-    return ops
+    return ops, skipped
 
 
 def font_ops(mod_id: str, resources: list) -> list:
@@ -98,4 +101,20 @@ def code_reports(added: list) -> list:
         reports.append({"kind": "ManualReviewRequired", "reason": "RuntimeCodeReplaceUnsupported",
                         "name": c["name"],
                         "fingerprint": {k: c.get(k) for k in ("bytecodeSha256", "instructionCount")}})
+    return reports
+
+
+def audio_reports(entries: list) -> list:
+    reports = []
+    for a in entries:
+        if not a.get("name"):
+            raise NormalizerError("audio entry missing name")
+        asset = a.get("asset") or {}
+        reports.append({"kind": "ManualReviewRequired", "reason": "RuntimeAudioReplaceUnsupported",
+                        "name": a["name"],
+                        "format": a.get("format"),
+                        "baseContentSha256": a.get("baseContentSha256"),
+                        "contentSha256": a.get("contentSha256"),
+                        "assetPath": asset.get("relativePath"),
+                        "assetSha256": asset.get("sha256")})
     return reports
