@@ -75,6 +75,41 @@ def cmd_multi_demo(strings_a, mod_a, strings_b, mod_b, game_id, datawin_path, ev
     print(f"MULTI-DEMO OK game={game_id} plan={len(plan)} untouched={before == after}")
 
 
+from soulmod_client.manager import Manager
+from soulmod_client.dtkr import load_lang, lang_ops, font_ops, sprite_ops, code_reports
+
+
+def cmd_dtkr_build(lang_path, result_path, stage_dir, mod_id, game_id, out_dir):
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    game = resolve(game_id)
+    mapping = load_lang(lang_path)
+    strings = lang_ops(mod_id, mapping)
+    result = json.loads(Path(result_path).read_text(encoding="utf-8"))
+    fonts = font_ops(mod_id, result["resources"])
+    sprites = sprite_ops(mod_id, result["sprites"])
+    patched = {c["name"]: c for c in result["patchedCodes"]}
+    base_names = {c["name"] for c in result["baseCodes"]}
+    added = [patched[n] for n in sorted(set(patched) - base_names)]
+    codes = code_reports(added)
+    stage = Path(stage_dir)
+    assets = []
+    for op in fonts + sprites:
+        src = stage / op["assetPath"]
+        digest = hashlib.sha256(src.read_bytes()).hexdigest()
+        assert digest == op["assetSha256"], op["id"]
+        assets.append(op["assetPath"])
+    ops = strings + fonts + sprites
+    (out / "manifest.json").write_text(json.dumps({
+        "manifestVersion": 1, "id": mod_id, "game": game,
+        "counts": {"strings": len(strings), "fonts": len(fonts),
+                     "sprites": len(sprites), "codeReview": len(codes)},
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "operations.json").write_text(json.dumps(ops, ensure_ascii=False), encoding="utf-8")
+    (out / "review.json").write_text(json.dumps(codes, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"DTKR-BUILD OK strings={len(strings)} fonts={len(fonts)} sprites={len(sprites)} review={len(codes)} assets={len(assets)}")
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "normalize":
@@ -83,5 +118,7 @@ if __name__ == "__main__":
         cmd_apply_demo(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
     elif cmd == "multi-demo":
         cmd_multi_demo(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8])
+    elif cmd == "dtkr-build":
+        cmd_dtkr_build(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7])
     else:
         raise SystemExit(f"unknown cmd: {cmd}")
