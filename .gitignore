@@ -7,3 +7,12 @@ __pycache__/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# ---- Local agent/evidence state (never committed) ----
+.omo/
+scratch/
+*.win
+*.exe
+*.wav
+*.ogg
+*.mp4
